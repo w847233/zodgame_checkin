@@ -22,6 +22,26 @@ jobs:
     - name: Install requirements
       run: |
         pip3 install -r ./zodgame/requirements.txt
+    - name: Install matched chromedriver
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        $ver = (Get-Item $chrome).VersionInfo.ProductVersion
+        $major = $ver.Split(".")[0]
+        Write-Host "Chrome $ver -> major $major"
+        $index = Invoke-RestMethod "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
+        $cand = $index.versions |
+          Where-Object { $_.version -like "$major.*" -and ($_.downloads.chromedriver | Where-Object { $_.platform -eq "win64" }) } |
+          Sort-Object { [version]$_.version } -Descending |
+          Select-Object -First 1
+        if (-not $cand) { throw "no chromedriver published for Chrome major $major" }
+        $url = ($cand.downloads.chromedriver | Where-Object { $_.platform -eq "win64" }).url
+        Write-Host "chromedriver $($cand.version) <- $url"
+        Invoke-WebRequest $url -OutFile chromedriver.zip
+        Expand-Archive chromedriver.zip -DestinationPath chromedriver-tmp -Force
+        New-Item -ItemType Directory -Force "C:\SeleniumWebDrivers\ChromeDriver" | Out-Null
+        Copy-Item "chromedriver-tmp\chromedriver-win64\chromedriver.exe" "C:\SeleniumWebDrivers\ChromeDriver\chromedriver.exe" -Force
     - name: Run 
       run: |
         python3 ./zodgame/zodgame.py "${{secrets.ZODGAME_COOKIE}}"
